@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from langflow.services.database.models.flow.model import Flow
     from langflow.services.database.models.folder.model import Folder
     from langflow.services.database.models.variable.model import Variable
+    from langflow.services.database.models.subscription.model import Organization, OrganizationMember
 
 
 class UserOptin(BaseModel):
@@ -49,6 +50,10 @@ class User(SQLModel, table=True):  # type: ignore[call-arg]
     optins: dict[str, Any] | None = Field(
         sa_column=Column(JSON, default=lambda: UserOptin().model_dump(), nullable=True)
     )
+    
+    # 组织关系
+    owned_organizations: list["Organization"] = Relationship(back_populates="owner")
+    organization_memberships: list["OrganizationMember"] = Relationship(back_populates="user")
 
 
 class UserCreate(SQLModel):

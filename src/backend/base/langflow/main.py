@@ -35,7 +35,7 @@ from langflow.initial_setup.setup import (
 from langflow.interface.components import get_and_cache_all_types_dict
 from langflow.interface.utils import setup_llm_caching
 from langflow.logging.logger import configure
-from langflow.middleware import ContentSizeLimitMiddleware
+from langflow.middleware import ContentSizeLimitMiddleware, add_all_middleware
 from langflow.services.deps import (
     get_queue_service,
     get_settings_service,
@@ -289,8 +289,12 @@ def create_app():
     )
 
     setup_sentry(app)
+    
+    # Add all middleware (security + performance)
+    asyncio.run(add_all_middleware(app))
+    
+    # Legacy CORS middleware (security middleware handles CORS now)
     origins = ["*"]
-
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

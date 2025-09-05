@@ -164,6 +164,22 @@ class Settings(BaseSettings):
     like_webhook_url: str | None = "https://api.langflow.store/flows/trigger/64275852-ec00-45c1-984e-3bff814732da"
 
     storage_type: str = "local"
+    
+    # Stripe billing configuration
+    stripe_secret_key: str | None = None
+    """Stripe secret key for payment processing."""
+    stripe_publishable_key: str | None = None
+    """Stripe publishable key for frontend integration."""
+    stripe_webhook_secret: str | None = None
+    """Stripe webhook endpoint secret for verifying webhook authenticity."""
+    
+    # Billing configuration
+    billing_enabled: bool = False
+    """Enable billing and subscription features."""
+    default_trial_days: int = 14
+    """Default trial period in days for new subscriptions."""
+    usage_tracking_enabled: bool = True
+    """Enable automatic usage tracking."""
 
     celery_enabled: bool = False
 

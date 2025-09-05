@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import Text, UniqueConstraint
@@ -6,6 +6,9 @@ from sqlmodel import Column, Field, Relationship, SQLModel
 
 from langflow.services.database.models.flow.model import Flow, FlowRead
 from langflow.services.database.models.user.model import User
+
+if TYPE_CHECKING:
+    from langflow.services.database.models.subscription.model import Organization
 
 
 class FolderBase(SQLModel):
@@ -27,8 +30,12 @@ class Folder(FolderBase, table=True):  # type: ignore[call-arg]
     flows: list[Flow] = Relationship(
         back_populates="folder", sa_relationship_kwargs={"cascade": "all, delete, delete-orphan"}
     )
+    
+    # Multi-tenant support
+    organization_id: str = Field(foreign_key="organization.id", index=True)
+    organization: "Organization" = Relationship()
 
-    __table_args__ = (UniqueConstraint("user_id", "name", name="unique_folder_name"),)
+    __table_args__ = (UniqueConstraint("organization_id", "name", name="unique_folder_name_per_org"),)
 
 
 class FolderCreate(FolderBase):

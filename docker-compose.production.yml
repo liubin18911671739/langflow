@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  # Langflow Application
+  langflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: langflow-app
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      - LANGFLOW_ENVIRONMENT=production
+      - LANGFLOW_HOST=0.0.0.0
+      - LANGFLOW_PORT=7860
+      - LANGFLOW_DATABASE_URL=postgresql://langflow:${LANGFLOW_DB_PASSWORD}@postgres:5432/langflow
+      - LANGFLOW_REDIS_URL=redis://:${LANGFLOW_REDIS_PASSWORD}@redis:6379/0
+      - LANGFLOW_SECRET_KEY=${LANGFLOW_SECRET_KEY}
+      - LANGFLOW_PUBLIC_URL=${LANGFLOW_PUBLIC_URL}
+      - LANGFLOW_SUPERUSER_USERNAME=${LANGFLOW_SUPERUSER_USERNAME}
+      - LANGFLOW_SUPERUSER_PASSWORD=${LANGFLOW_SUPERUSER_PASSWORD}
+      - LANGFLOW_RUN_MIGRATIONS=true
+      - LANGFLOW_AUTO_CREATE_SUPERUSER=true
+    volumes:
+      - langflow_uploads:/app/uploads
+      - langflow_temp:/app/temp
+      - langflow_logs:/app/logs
+      - langflow_backups:/app/backups
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - langflow-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/api/v1/health_check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: langflow-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=langflow
+      - POSTGRES_USER=langflow
+      - POSTGRES_PASSWORD=${LANGFLOW_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - langflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langflow -d langflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: langflow-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${LANGFLOW_REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - langflow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: langflow-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - langflow
+    networks:
+      - langflow-network
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: langflow-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - langflow-network
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: langflow-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - langflow-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  langflow_uploads:
+    driver: local
+  langflow_temp:
+    driver: local
+  langflow_logs:
+    driver: local
+  langflow_backups:
+    driver: local
+  nginx_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  langflow-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
